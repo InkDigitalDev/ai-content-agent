@@ -12,6 +12,16 @@
   --font-mono: var(--font-geist-mono);
 }
 
+@layer base {
+  button:not(:disabled) {
+    @apply cursor-pointer;
+  }
+
+  button:disabled {
+    @apply cursor-not-allowed;
+  }
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
