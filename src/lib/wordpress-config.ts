@@ -3,6 +3,11 @@ import "server-only";
 import fs from "fs/promises";
 import path from "path";
 
+import {
+    get,
+    put
+} from "@vercel/blob";
+
 export type WordPressConfig = {
     siteName: string;
     url: string;
@@ -15,7 +20,6 @@ export type PublicWordPressConfig = {
     url: string;
     username: string;
     hasApplicationPassword: boolean;
-    environmentManaged: boolean;
 };
 
 const CONFIG_DIRECTORY =
@@ -30,30 +34,22 @@ const CONFIG_FILE =
         "wordpress-config.json"
     );
 
-export function isEnvironmentManaged() {
+const BLOB_CONFIG_PATH =
+    "settings/wordpress-config.json";
+
+function isVercel() {
     return process.env.VERCEL === "1";
 }
 
 function getFallbackConfig(): WordPressConfig {
-    const environmentManaged =
-        isEnvironmentManaged();
-
     return {
         siteName:
             process.env.WORDPRESS_SITE_NAME ??
-            (
-                environmentManaged
-                    ? "WordPress"
-                    : "AI Boilerplate"
-            ),
+            "AI Boilerplate",
 
         url:
             process.env.WORDPRESS_URL ??
-            (
-                environmentManaged
-                    ? ""
-                    : "http://ai-boilerplate.local"
-            ),
+            "http://ai-boilerplate.local",
 
         username:
             process.env.WORDPRESS_USERNAME ??
@@ -76,33 +72,33 @@ function normaliseUrl(
         );
 }
 
-export async function getWordPressConfig(): Promise<WordPressConfig> {
-    const fallback =
-        getFallbackConfig();
-
-    if (
-        isEnvironmentManaged()
-    ) {
-        return {
-            ...fallback,
-            url:
-                normaliseUrl(
-                    fallback.url
-                )
-        };
-    }
-
+async function readBlobConfig(): Promise<WordPressConfig | null> {
     try {
-        const file =
-            await fs.readFile(
-                CONFIG_FILE,
-                "utf8"
+        const result =
+            await get(
+                BLOB_CONFIG_PATH,
+                {
+                    access:
+                        "private"
+                }
             );
+
+        if (!result) {
+            return null;
+        }
+
+        const text =
+            await new Response(
+                result.stream
+            ).text();
 
         const parsed =
             JSON.parse(
-                file
+                text
             ) as Partial<WordPressConfig>;
+
+        const fallback =
+            getFallbackConfig();
 
         return {
             siteName:
@@ -124,6 +120,64 @@ export async function getWordPressConfig(): Promise<WordPressConfig> {
                 fallback.applicationPassword
         };
     } catch {
+        return null;
+    }
+}
+
+async function readLocalConfig(): Promise<WordPressConfig | null> {
+    try {
+        const file =
+            await fs.readFile(
+                CONFIG_FILE,
+                "utf8"
+            );
+
+        const parsed =
+            JSON.parse(
+                file
+            ) as Partial<WordPressConfig>;
+
+        const fallback =
+            getFallbackConfig();
+
+        return {
+            siteName:
+                parsed.siteName?.trim() ||
+                fallback.siteName,
+
+            url:
+                normaliseUrl(
+                    parsed.url ||
+                    fallback.url
+                ),
+
+            username:
+                parsed.username?.trim() ||
+                fallback.username,
+
+            applicationPassword:
+                parsed.applicationPassword ||
+                fallback.applicationPassword
+        };
+    } catch {
+        return null;
+    }
+}
+
+export async function getWordPressConfig(): Promise<WordPressConfig> {
+    const fallback =
+        getFallbackConfig();
+
+    if (
+        isVercel()
+    ) {
+        const blobConfig =
+            await readBlobConfig();
+
+        if (blobConfig) {
+            return blobConfig;
+        }
+
         return {
             ...fallback,
             url:
@@ -132,19 +186,26 @@ export async function getWordPressConfig(): Promise<WordPressConfig> {
                 )
         };
     }
+
+    const localConfig =
+        await readLocalConfig();
+
+    if (localConfig) {
+        return localConfig;
+    }
+
+    return {
+        ...fallback,
+        url:
+            normaliseUrl(
+                fallback.url
+            )
+    };
 }
 
 export async function saveWordPressConfig(
     config: WordPressConfig
 ) {
-    if (
-        isEnvironmentManaged()
-    ) {
-        throw new Error(
-            "WordPress settings are managed by environment variables on this deployment."
-        );
-    }
-
     const normalisedConfig: WordPressConfig = {
         siteName:
             config.siteName.trim(),
@@ -160,6 +221,31 @@ export async function saveWordPressConfig(
         applicationPassword:
             config.applicationPassword
     };
+
+    if (
+        isVercel()
+    ) {
+        await put(
+            BLOB_CONFIG_PATH,
+            JSON.stringify(
+                normalisedConfig,
+                null,
+                4
+            ),
+            {
+                access:
+                    "private",
+                contentType:
+                    "application/json",
+                allowOverwrite:
+                    true,
+                cacheControlMaxAge:
+                    60
+            }
+        );
+
+        return normalisedConfig;
+    }
 
     await fs.mkdir(
         CONFIG_DIRECTORY,
@@ -197,10 +283,7 @@ export function getPublicWordPressConfig(
         hasApplicationPassword:
             Boolean(
                 config.applicationPassword
-            ),
-
-        environmentManaged:
-            isEnvironmentManaged()
+            )
     };
 }
 
