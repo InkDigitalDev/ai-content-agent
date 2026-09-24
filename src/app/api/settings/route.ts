@@ -7,6 +7,7 @@ import {
     getPublicWordPressConfig,
     getWordPressAuthHeader,
     getWordPressConfig,
+    isEnvironmentManaged,
     saveWordPressConfig
 } from "@/lib/wordpress-config";
 
@@ -48,6 +49,21 @@ export async function GET() {
 export async function POST(
     request: NextRequest
 ) {
+    if (
+        isEnvironmentManaged()
+    ) {
+        return NextResponse.json(
+            {
+                success: false,
+                error:
+                    "Settings are managed through Vercel environment variables on this deployment."
+            },
+            {
+                status: 405
+            }
+        );
+    }
+
     let body:
         SettingsRequest;
 
@@ -214,25 +230,44 @@ export async function PATCH(
     const current =
         await getWordPressConfig();
 
-    const config = {
-        siteName:
-            body.siteName?.trim() ||
-            current.siteName,
+    const environmentManaged =
+        isEnvironmentManaged();
 
-        url:
-            body.url?.trim() ||
-            current.url,
+    const config =
+        environmentManaged
+            ? current
+            : {
+                siteName:
+                    body.siteName?.trim() ||
+                    current.siteName,
 
-        username:
-            body.username?.trim() ||
-            current.username,
+                url:
+                    body.url?.trim() ||
+                    current.url,
 
-        applicationPassword:
-            body.applicationPassword &&
-            body.applicationPassword.trim() !== ""
-                ? body.applicationPassword
-                : current.applicationPassword
-    };
+                username:
+                    body.username?.trim() ||
+                    current.username,
+
+                applicationPassword:
+                    body.applicationPassword &&
+                    body.applicationPassword.trim() !== ""
+                        ? body.applicationPassword
+                        : current.applicationPassword
+            };
+
+    if (!config.url) {
+        return NextResponse.json(
+            {
+                success: false,
+                error:
+                    "WordPress URL is not configured"
+            },
+            {
+                status: 400
+            }
+        );
+    }
 
     try {
         const auth =

@@ -10,6 +10,7 @@ type PublicWordPressConfig = {
     url: string;
     username: string;
     hasApplicationPassword: boolean;
+    environmentManaged: boolean;
 };
 
 type ConnectionResult = {
@@ -46,6 +47,12 @@ export default function SettingsForm() {
     const [
         hasApplicationPassword,
         setHasApplicationPassword
+    ] =
+        useState(false);
+
+    const [
+        environmentManaged,
+        setEnvironmentManaged
     ] =
         useState(false);
 
@@ -130,6 +137,12 @@ export default function SettingsForm() {
                         config.hasApplicationPassword
                     )
                 );
+
+                setEnvironmentManaged(
+                    Boolean(
+                        config.environmentManaged
+                    )
+                );
             } catch {
                 setError(
                     "Could not load settings"
@@ -207,6 +220,12 @@ export default function SettingsForm() {
     }
 
     async function saveSettings() {
+        if (
+            environmentManaged
+        ) {
+            return;
+        }
+
         setSaving(true);
         setError("");
         setSuccess("");
@@ -277,6 +296,11 @@ export default function SettingsForm() {
         );
     }
 
+    const inputClasses =
+        environmentManaged
+            ? "w-full cursor-not-allowed rounded-xl border border-zinc-200 bg-zinc-100 px-4 py-3 text-sm text-zinc-600 outline-none"
+            : "w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100";
+
     return (
         <div className="space-y-6">
             <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
@@ -293,6 +317,18 @@ export default function SettingsForm() {
                         Configure which WordPress website the Content Agent reads from and populates.
                     </p>
                 </div>
+
+                {environmentManaged && (
+                    <div className="mt-6 rounded-xl border border-violet-200 bg-violet-50 p-4">
+                        <p className="text-sm font-semibold text-violet-900">
+                            Deployment configuration
+                        </p>
+
+                        <p className="mt-1 text-sm leading-6 text-violet-700">
+                            This deployment is configured using Vercel environment variables. Update the WordPress connection in Vercel and redeploy the project to change these values.
+                        </p>
+                    </div>
+                )}
 
                 <div className="mt-6 space-y-5">
                     <div>
@@ -314,8 +350,13 @@ export default function SettingsForm() {
                                         .value
                                 )
                             }
+                            disabled={
+                                environmentManaged
+                            }
                             placeholder="Client website"
-                            className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100"
+                            className={
+                                inputClasses
+                            }
                         />
 
                         <p className="mt-2 text-xs text-zinc-400">
@@ -342,8 +383,13 @@ export default function SettingsForm() {
                                         .value
                                 )
                             }
+                            disabled={
+                                environmentManaged
+                            }
                             placeholder="https://example.com"
-                            className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100"
+                            className={
+                                inputClasses
+                            }
                         />
 
                         <p className="mt-2 text-xs text-zinc-400">
@@ -370,8 +416,13 @@ export default function SettingsForm() {
                                         .value
                                 )
                             }
+                            disabled={
+                                environmentManaged
+                            }
                             autoComplete="username"
-                            className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100"
+                            className={
+                                inputClasses
+                            }
                         />
                     </div>
 
@@ -383,37 +434,51 @@ export default function SettingsForm() {
 
                             {hasApplicationPassword && (
                                 <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-                                    Password stored
+                                    Password configured
                                 </span>
                             )}
                         </div>
 
-                        <input
-                            type="password"
-                            value={
-                                applicationPassword
-                            }
-                            onChange={(
-                                event
-                            ) =>
-                                setApplicationPassword(
-                                    event
-                                        .target
-                                        .value
-                                )
-                            }
-                            placeholder={
-                                hasApplicationPassword
-                                    ? "Leave blank to keep current password"
-                                    : "Enter WordPress application password"
-                            }
-                            autoComplete="new-password"
-                            className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100"
-                        />
+                        {!environmentManaged && (
+                            <>
+                                <input
+                                    type="password"
+                                    value={
+                                        applicationPassword
+                                    }
+                                    onChange={(
+                                        event
+                                    ) =>
+                                        setApplicationPassword(
+                                            event
+                                                .target
+                                                .value
+                                        )
+                                    }
+                                    placeholder={
+                                        hasApplicationPassword
+                                            ? "Leave blank to keep current password"
+                                            : "Enter WordPress application password"
+                                    }
+                                    autoComplete="new-password"
+                                    className={
+                                        inputClasses
+                                    }
+                                />
 
-                        <p className="mt-2 text-xs text-zinc-400">
-                            The saved password is never returned to the browser.
-                        </p>
+                                <p className="mt-2 text-xs text-zinc-400">
+                                    The saved password is never returned to the browser.
+                                </p>
+                            </>
+                        )}
+
+                        {environmentManaged && (
+                            <div className="rounded-xl border border-zinc-200 bg-zinc-100 px-4 py-3 text-sm text-zinc-500">
+                                {hasApplicationPassword
+                                    ? "Application password configured in environment variables."
+                                    : "Application password is not configured."}
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -483,7 +548,9 @@ export default function SettingsForm() {
                         }
                         disabled={
                             testing ||
-                            saving
+                            !url ||
+                            !username ||
+                            !hasApplicationPassword
                         }
                         className="rounded-xl border border-zinc-200 bg-white px-5 py-3 text-sm font-semibold text-zinc-700 transition hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
@@ -492,21 +559,23 @@ export default function SettingsForm() {
                             : "Test connection"}
                     </button>
 
-                    <button
-                        type="button"
-                        onClick={
-                            saveSettings
-                        }
-                        disabled={
-                            saving ||
-                            testing
-                        }
-                        className="rounded-xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        {saving
-                            ? "Saving..."
-                            : "Save settings"}
-                    </button>
+                    {!environmentManaged && (
+                        <button
+                            type="button"
+                            onClick={
+                                saveSettings
+                            }
+                            disabled={
+                                saving ||
+                                testing
+                            }
+                            className="rounded-xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {saving
+                                ? "Saving..."
+                                : "Save settings"}
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

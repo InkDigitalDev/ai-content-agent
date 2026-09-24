@@ -15,6 +15,7 @@ export type PublicWordPressConfig = {
     url: string;
     username: string;
     hasApplicationPassword: boolean;
+    environmentManaged: boolean;
 };
 
 const CONFIG_DIRECTORY =
@@ -29,13 +30,30 @@ const CONFIG_FILE =
         "wordpress-config.json"
     );
 
+export function isEnvironmentManaged() {
+    return process.env.VERCEL === "1";
+}
+
 function getFallbackConfig(): WordPressConfig {
+    const environmentManaged =
+        isEnvironmentManaged();
+
     return {
         siteName:
-            "AI Boilerplate",
+            process.env.WORDPRESS_SITE_NAME ??
+            (
+                environmentManaged
+                    ? "WordPress"
+                    : "AI Boilerplate"
+            ),
 
         url:
-            "http://ai-boilerplate.local",
+            process.env.WORDPRESS_URL ??
+            (
+                environmentManaged
+                    ? ""
+                    : "http://ai-boilerplate.local"
+            ),
 
         username:
             process.env.WORDPRESS_USERNAME ??
@@ -59,6 +77,21 @@ function normaliseUrl(
 }
 
 export async function getWordPressConfig(): Promise<WordPressConfig> {
+    const fallback =
+        getFallbackConfig();
+
+    if (
+        isEnvironmentManaged()
+    ) {
+        return {
+            ...fallback,
+            url:
+                normaliseUrl(
+                    fallback.url
+                )
+        };
+    }
+
     try {
         const file =
             await fs.readFile(
@@ -70,9 +103,6 @@ export async function getWordPressConfig(): Promise<WordPressConfig> {
             JSON.parse(
                 file
             ) as Partial<WordPressConfig>;
-
-        const fallback =
-            getFallbackConfig();
 
         return {
             siteName:
@@ -94,13 +124,27 @@ export async function getWordPressConfig(): Promise<WordPressConfig> {
                 fallback.applicationPassword
         };
     } catch {
-        return getFallbackConfig();
+        return {
+            ...fallback,
+            url:
+                normaliseUrl(
+                    fallback.url
+                )
+        };
     }
 }
 
 export async function saveWordPressConfig(
     config: WordPressConfig
 ) {
+    if (
+        isEnvironmentManaged()
+    ) {
+        throw new Error(
+            "WordPress settings are managed by environment variables on this deployment."
+        );
+    }
+
     const normalisedConfig: WordPressConfig = {
         siteName:
             config.siteName.trim(),
@@ -153,7 +197,10 @@ export function getPublicWordPressConfig(
         hasApplicationPassword:
             Boolean(
                 config.applicationPassword
-            )
+            ),
+
+        environmentManaged:
+            isEnvironmentManaged()
     };
 }
 
